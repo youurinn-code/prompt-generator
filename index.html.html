@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pixai プロンプト変換</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;700&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #f5f0eb;
+  --ink: #1a1510;
+  --ink2: #4a3f35;
+  --muted: #9a8f85;
+  --line: #d8cfc5;
+  --accent: #c0392b;
+  --accent2: #2c6e8a;
+  --card: #ffffff;
+  --shadow: 0 1px 3px rgba(26,21,16,0.08), 0 4px 16px rgba(26,21,16,0.04);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Noto Serif JP', serif;
+  min-height: 100vh;
+  padding: 40px 20px 80px;
+}
+
+/* 和紙テクスチャ的な背景 */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(26,21,16,0.03) 28px),
+    repeating-linear-gradient(90deg, transparent, transparent 27px, rgba(26,21,16,0.015) 28px);
+  pointer-events: none;
+}
+
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  position: relative;
+}
+
+header {
+  margin-bottom: 44px;
+}
+
+.header-rule {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.rule-line {
+  flex: 1;
+  height: 1px;
+  background: var(--ink);
+}
+
+.rule-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+h1 {
+  font-size: clamp(20px, 4vw, 28px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.sub {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  margin-top: 6px;
+  font-weight: 300;
+}
+
+/* 入力エリア */
+.input-block {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--ink);
+  padding: 24px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+  position: relative;
+}
+
+.input-block::before {
+  content: attr(data-num);
+  position: absolute;
+  top: -14px; left: 20px;
+  background: var(--ink);
+  color: #f5f0eb;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  letter-spacing: 0.1em;
+}
+
+label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: var(--ink2);
+  font-weight: 700;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 4px 12px;
+  font-family: 'Noto Serif JP', serif;
+  font-size: 15px;
+  color: var(--ink);
+  outline: none;
+  resize: none;
+  line-height: 1.7;
+  transition: border-color 0.2s;
+}
+
+textarea:focus { border-bottom-color: var(--ink); }
+textarea::placeholder { color: var(--muted); font-weight: 300; }
+
+.char-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 8px;
+  font-family: 'DM Mono', monospace;
+}
+
+/* オプションチップ */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  padding: 4px 12px;
+  font-size: 11px;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink2);
+  transition: all 0.15s;
+  letter-spacing: 0.05em;
+}
+
+.chip:hover { border-color: var(--ink); color: var(--ink); }
+.chip.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
+/* 生成ボタン */
+.gen-btn {
+  width: 100%;
+  padding: 18px;
+  background: var(--ink);
+  border: none;
+  color: var(--bg);
+  font-family: 'Noto Serif JP', serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 36px;
+}
+
+.gen-btn::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 0;
+  width: 0; height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+  z-index: 0;
+}
+
+.gen-btn:hover::after { width: 100%; }
+.gen-btn span { position: relative; z-index: 1; }
+.gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.gen-btn:disabled::after { display: none; }
+
+/* 結果 */
+.result-wrap { display: none; }
+.result-wrap.show { display: block; }
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.section-title span {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  font-family: 'DM Mono', monospace;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.section-title::before, .section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.result-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 20px 24px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+  position: relative;
+}
+
+.result-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.copy-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.1em;
+}
+
+.copy-btn:hover { border-color: var(--ink); color: var(--ink); }
+.copy-btn.done { border-color: var(--accent2); color: var(--accent2); }
+
+.result-text {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--ink);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.result-text.neg { color: var(--accent); opacity: 0.85; }
+
+.caption-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent2);
+  padding: 20px 24px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+
+.caption-text {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+/* ローディング */
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+  padding: 8px 0;
+}
+
+.dots span {
+  display: inline-block;
+  animation: blink 1.2s ease infinite;
+  font-size: 18px;
+  line-height: 1;
+}
+.dots span:nth-child(2) { animation-delay: 0.2s; }
+.dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+
+/* Settings grid */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.setting-item {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.setting-item .k { color: var(--muted); }
+.setting-item .v { color: var(--ink); font-weight: 500; }
+
+@media (max-width: 500px) {
+  .settings-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="header-rule">
+      <div class="rule-line"></div>
+      <div class="rule-dot"></div>
+      <div class="rule-line"></div>
+    </div>
+    <h1>pixai<br>プロンプト変換</h1>
+    <p class="sub">日本語 → pixai 最適化英語プロンプト</p>
+  </header>
+
+  <!-- 入力1: 日本語テキスト -->
+  <div class="input-block" data-num="01 — SCENE / KEYWORD">
+    <label>描きたいシーンや単語を日本語で</label>
+    <textarea id="jpInput" rows="4" placeholder="例：雨の中、傘をさして歩いている&#10;例：夜桜、風、寂しそうな横顔&#10;例：コーヒーを飲みながら窓の外を見ている"></textarea>
+    <p class="char-hint">文章でも単語の羅列でも可</p>
+  </div>
+
+  <!-- 入力2: キャラ固定情報（任意） -->
+  <div class="input-block" data-num="02 — CHARACTER（任意）">
+    <label>キャラの固定情報（省略可）</label>
+    <textarea id="charInfo" rows="2" placeholder="例：黒髪ショート、赤い目、黒スーツ"></textarea>
+    <p class="char-hint">毎回同じキャラを使う場合は入力しておくと省力化できる</p>
+  </div>
+
+  <!-- オプション -->
+  <div class="input-block" data-num="03 — OPTIONS">
+    <label>構図・出力</label>
+    <div class="chips" id="framing">
+      <span class="chip on" data-val="face_focus">顔アップ</span>
+      <span class="chip" data-val="bust_up">バストアップ</span>
+      <span class="chip" data-val="cowboy_shot">腰上</span>
+      <span class="chip" data-val="full_body">全身</span>
+    </div>
+    <label style="margin-top:16px">雰囲気・スタイル</label>
+    <div class="chips" id="style">
+      <span class="chip" data-val="cinematic">映画的</span>
+      <span class="chip on" data-val="anime_visual">アニメ塗り</span>
+      <span class="chip" data-val="illustration">イラスト風</span>
+      <span class="chip" data-val="dramatic_lighting">ドラマチック光</span>
+      <span class="chip" data-val="soft_light">柔らかい光</span>
+      <span class="chip" data-val="dark_mood">ダーク</span>
+    </div>
+  </div>
+
+  <button class="gen-btn" id="genBtn" onclick="generate()">
+    <span>変 換 す る</span>
+  </button>
+
+  <!-- 結果 -->
+  <div class="result-wrap" id="resultWrap">
+
+    <div class="section-title"><span>Positive Prompt</span></div>
+    <div class="result-card" id="posCard">
+      <div class="result-label">
+        POSITIVE
+        <button class="copy-btn" onclick="cp('posText',this)">COPY</button>
+      </div>
+      <div class="result-text" id="posText"></div>
+    </div>
+
+    <div class="section-title"><span>Negative Prompt</span></div>
+    <div class="result-card" id="negCard">
+      <div class="result-label">
+        NEGATIVE
+        <button class="copy-btn" onclick="cp('negText',this)">COPY</button>
+      </div>
+      <div class="result-text neg" id="negText"></div>
+    </div>
+
+    <div class="section-title"><span>推奨設定</span></div>
+    <div class="result-card" id="settingsCard">
+      <div class="result-label">PIXAI SETTINGS</div>
+      <div id="settingsText"></div>
+    </div>
+
+    <div class="section-title"><span>X 投稿キャプション案</span></div>
+    <div class="caption-card" id="captionCard">
+      <div class="result-label">
+        CAPTION
+        <button class="copy-btn" onclick="cp('captionText',this)">COPY</button>
+      </div>
+      <div class="caption-text" id="captionText"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// チップ選択（framing は単一、style は複数）
+document.querySelectorAll('#framing .chip').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('#framing .chip').forEach(x => x.classList.remove('on'));
+    c.classList.add('on');
+  });
+});
+document.querySelectorAll('#style .chip').forEach(c => {
+  c.addEventListener('click', () => c.classList.toggle('on'));
+});
+
+function getChip(groupId) {
+  return [...document.querySelectorAll(`#${groupId} .chip.on`)].map(c=>c.dataset.val).join(', ');
+}
+
+async function generate() {
+  const jp = document.getElementById('jpInput').value.trim();
+  if (!jp) { alert('シーンや単語を入力してください'); return; }
+
+  const charInfo = document.getElementById('charInfo').value.trim();
+  const framing = getChip('framing');
+  const style = getChip('style');
+
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true;
+  btn.querySelector('span').textContent = '変換中…';
+
+  const rw = document.getElementById('resultWrap');
+  rw.classList.add('show');
+
+  // ローディング表示
+  const loadHtml = `<div class="loading"><div class="dots"><span>●</span><span>●</span><span>●</span></div>生成中</div>`;
+  ['posText','negText','settingsText','captionText'].forEach(id => {
+    document.getElementById(id).innerHTML = loadHtml;
+  });
+
+  const systemPrompt = `あなたはpixaiでアニメスタイルイラストを生成するための専門プロンプトエンジニアです。
+ユーザーが日本語で入力したシーン・単語・文章を、pixaiで最高品質の画像が生成できる英語プロンプトに変換します。
+
+ルール：
+- positive/negativeはDanbooru/NovelAI形式のタグ（カンマ区切り英語）
+- qualityタグ（masterpiece, best quality, ultra detailed等）を必ず含める
+- 構図・カメラアングル指示も含める
+- X投稿キャプションは日本語、絵文字あり、ハッシュタグ3〜5個、40〜80文字程度の自然な一言
+- 推奨設定はSTEPS/CFG/SAMPLER/ASPECT RATIOをシンプルに
+- 出力はJSONのみ。余計な文字・コードブロック不要
+{"positive":"...","negative":"...","settings":{"steps":"...","cfg":"...","sampler":"...","ratio":"..."},"caption":"..."}`;
+
+  const userPrompt = `日本語入力：${jp}
+キャラ固定情報：${charInfo || 'なし'}
+構図：${framing}
+スタイル：${style || 'アニメ塗り'}
+
+このシーンをpixai向け英語プロンプトに変換して。`;
+
+  try {
+    const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY'; // ← ここにAPIキーを入力
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          { role: 'user', parts: [{ text: systemPrompt + '\n\n' + userPrompt }] }
+        ],
+        generationConfig: { maxOutputTokens: 1000, temperature: 0.7 }
+      })
+    });
+
+    const data = await res.json();
+    const raw = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+    const r = JSON.parse(raw);
+
+    document.getElementById('posText').textContent = r.positive;
+    document.getElementById('negText').textContent = r.negative;
+    document.getElementById('captionText').textContent = r.caption;
+
+    const s = r.settings;
+    document.getElementById('settingsText').innerHTML = `
+      <div class="settings-grid">
+        <div class="setting-item"><span class="k">Steps　</span><span class="v">${s.steps}</span></div>
+        <div class="setting-item"><span class="k">CFG　</span><span class="v">${s.cfg}</span></div>
+        <div class="setting-item"><span class="k">Sampler　</span><span class="v">${s.sampler}</span></div>
+        <div class="setting-item"><span class="k">Aspect　</span><span class="v">${s.ratio}</span></div>
+      </div>`;
+
+    // スクロール
+    document.getElementById('resultWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  } catch(e) {
+    document.getElementById('posText').textContent = 'エラーが発生しました。再試行してください。\n' + e.message;
+  }
+
+  btn.disabled = false;
+  btn.querySelector('span').textContent = '変 換 す る';
+}
+
+async function cp(id, btn) {
+  const el = document.getElementById(id);
+  // settingsTextは特別処理
+  let text;
+  if (id === 'settingsText') {
+    text = el.innerText;
+  } else {
+    text = el.textContent;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'COPIED';
+    btn.classList.add('done');
+    setTimeout(() => { btn.textContent = 'COPY'; btn.classList.remove('done'); }, 2000);
+  } catch(e) {}
+}
+</script>
+</body>
+</html>
